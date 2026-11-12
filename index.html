@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>매물장</title>
+<title>리바운드부동산중개 종로센터 · 매물장</title>
 <script src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <style>
 #dAddr{padding:0;max-width:520px;overflow:hidden}
@@ -22,11 +22,11 @@
 .fleg{position:absolute;left:8px;bottom:8px;z-index:5;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:11px;color:var(--ink)}.fleg i{display:inline-block;width:22px;height:10px}.fball{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5;color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.12);transform:translateY(-6px);white-space:nowrap}
 
 #map{position:relative;height:260px;border:1px solid var(--line);border-radius:10px;margin-top:8px;display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:13px;text-align:center;padding:10px}
-:root{--bg:#f3f1ec;--card:#fbfaf7;--ink:#3a4350;--sub:#7b8594;--line:#e1ddd3;--pt:#5f7d95;--pt2:#e6edf2;--ok:#6a9a7b;--warn:#c08a4a}
+:root{--bg:#f6f4f0;--card:#fdfcfa;--ink:#3d4048;--sub:#80838c;--line:#e6e1d9;--pt:#e8603c;--pt2:#fbebe5;--ok:#059669;--warn:#c08a4a}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Malgun Gothic","Apple SD Gothic Neo",sans-serif}
-header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-header h1{font-size:17px;margin:0;font-weight:700}
+header{display:flex;align-items:center;gap:14px;padding:10px 20px;background:#fff;border-bottom:3px solid var(--pt);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0;font-weight:700;line-height:1.25;color:#2a2d33}header h1 small{display:block;font-size:10px;letter-spacing:.14em;color:var(--pt);font-weight:700}header h1 em{font-style:normal;font-weight:500;color:var(--sub);margin-left:6px;font-size:14px}
 header .sp{flex:1}
 nav button,.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 14px;border-radius:8px;cursor:pointer;font:inherit}
 nav button.on,.btn.pt{background:var(--pt);border-color:var(--pt);color:#fff}
@@ -65,7 +65,7 @@ pre{background:#fff;border:1px solid var(--line);padding:10px;border-radius:8px;
 </head>
 <body>
 <header>
-  <h1>매물장</h1>
+  <h1><small>REBOUND</small>(주)리바운드부동산중개 종로센터<em>매물장</em></h1>
   <nav><button id="nR" class="on">매물등록</button> <button id="nL">내 폴더 목록</button> <button id="nS">공유DB</button></nav>
   <span class="sp"></span>
   <span id="rootName" style="color:var(--sub);font-size:12px"></span>
@@ -512,7 +512,7 @@ async function renderSheetList(){
 }
 
 /* ===== 설정 · Apps Script ===== */
-const APPS_SCRIPT=`var SEOUL_KEY='여기에_서울시_인증키';
+const APPS_SCRIPT=`var SEOUL_KEY=PropertiesService.getScriptProperties().getProperty('SEOUL_KEY')||'';
 function J(o){return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);}
 function sheet_(){var ss=SpreadsheetApp.getActiveSpreadsheet();return ss.getSheetByName('매물DB')||ss.insertSheet('매물DB');}
 function seoul_(svc,a,b,extra){
@@ -542,7 +542,7 @@ function tm_(lat,lng){
   return [x,y];
 }
 function foot_(lat,lng){
-  if(!SEOUL_KEY||SEOUL_KEY.indexOf('여기에')===0)return {error:'서울시 인증키가 코드에 입력되지 않았습니다'};
+  if(!SEOUL_KEY||false)return {error:'서울시 인증키가 스크립트 속성(SEOUL_KEY)에 없습니다'};
   var p=tm_(+lat,+lng), best=null, bd=1e12;
   trdars_().forEach(function(t){var d=Math.sqrt(Math.pow(t[2]-p[0],2)+Math.pow(t[3]-p[1],2));if(d<bd){bd=d;best=t;}});
   if(!best)return {error:'상권 목록을 불러오지 못했습니다 (인증키 확인)'};
@@ -583,7 +583,7 @@ function flpop_(){
   return null;
 }
 function footmap_(lat,lng,radius){
-  if(!SEOUL_KEY||SEOUL_KEY.indexOf('여기에')===0)return {error:'서울시 인증키가 코드에 입력되지 않았습니다'};
+  if(!SEOUL_KEY||false)return {error:'서울시 인증키가 스크립트 속성(SEOUL_KEY)에 없습니다'};
   var p=tm_(+lat,+lng), R=Math.min(+radius||1000,3000), tr=trdars_(), fp=flpop_();
   if(!tr.length||!fp)return {error:'상권/유동인구 데이터를 불러오지 못했습니다 (인증키 확인)'};
   var list=[], best=null, bd=1e12;
