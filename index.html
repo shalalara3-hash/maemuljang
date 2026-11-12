@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>매물장</title>
-<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<script src="https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <style>
 #dAddr{padding:0;max-width:520px;overflow:hidden}
 #dAddr .hd{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--pt2);font-weight:700;font-size:16px}
@@ -58,7 +58,7 @@ pre{background:#fff;border:1px solid var(--line);padding:10px;border-radius:8px;
 <body>
 <header>
   <h1>매물장</h1>
-  <nav><button id="nR" class="on">매물등록</button> <button id="nL">매물목록</button></nav>
+  <nav><button id="nR" class="on">매물등록</button> <button id="nL">내 폴더 목록</button> <button id="nS">공유DB</button></nav>
   <span class="sp"></span>
   <span id="rootName" style="color:var(--sub);font-size:12px"></span>
   <button class="btn sm" id="bSet">설정</button>
@@ -254,6 +254,7 @@ function bind(){
   $('#bReset').onclick=()=>{photos=[];files=[];renderForm()};
   $('#bSave').onclick=save;
   $('#bAddr').onclick=openAddr;
+  let gt; ['road','dong','jibun'].forEach(k=>$('#f_'+k).addEventListener('change',()=>{clearTimeout(gt);gt=setTimeout(()=>geocode($('#f_road').value||`${$('#f_sido').value} ${$('#f_gu').value} ${$('#f_dong').value} ${$('#f_jibun').value}`),400)}));
   initMap();
 }
 
@@ -332,11 +333,13 @@ async function walkItems(){
 async function nextNo(ymd){
   const items=await walkItems(); let mx=0;
   for(const it of items){const m=it.name.match(/^RB-(\d{6})-(\d{3})/);if(m&&m[1]===ymd) mx=Math.max(mx,+m[2])}
+  const u=cfg().url;
+  if(u){try{const r=await fetch(u+'?action=next&ymd='+ymd);const j=await r.json();mx=Math.max(mx,+j.max||0)}catch(e){}}
   return `RB-${ymd}-${String(mx+1).padStart(3,'0')}`;
 }
 function csvCell(v){v=Array.isArray(v)?v.join('|'):String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function sheetRow(rec){
-  const cols=['매물번호','등록일','유형',...SCHEMA.filter(f=>!f.sec&&!SHEET_EXCLUDE.includes(f.k)&&f.k!=='bldgType2').map(f=>f.k),'사진수','폴더경로'];
+  const cols=['매물번호','등록일','유형',...SCHEMA.filter(f=>!f.sec&&f.k&&!SHEET_EXCLUDE.includes(f.k)&&f.k!=='bldgType2').map(f=>f.k),'사진수','폴더경로'];
   return {cols,row:cols.map(c=>c==='매물번호'?rec.no:c==='등록일'?rec.created:c==='유형'?rec.type:c==='사진수'?rec.photoCount:c==='폴더경로'?rec.path:(rec.data[c]??''))};
 }
 async function appendCsv(rec){
@@ -411,17 +414,57 @@ async function renderList(){
 }
 const setupHTML=()=>`<div class="card setup"><h2 style="font-size:16px">저장 위치를 선택해 주세요</h2><p style="color:var(--sub)">선택한 폴더 안에 <b>매물장</b> 폴더와 <b>매물DB.csv</b>가 만들어집니다.<br>(Chrome 또는 Edge에서 실행해 주세요)</p><button class="btn pt" id="bPick">폴더 선택</button></div>`;
 
+/* ===== 공유 DB (구글 시트) 목록 ===== */
+async function renderSheetList(){
+  const url=cfg().url;
+  if(!url){$('#main').innerHTML='<div class="card setup"><h2 style="font-size:16px">공유 DB가 연결되지 않았습니다</h2><p style="color:var(--sub)">설정에 Apps Script 웹앱 URL을 입력하세요.</p></div>';return}
+  $('#main').innerHTML='<div class="card">시트에서 불러오는 중...</div>';
+  let rows;
+  try{const j=await (await fetch(url+'?action=list')).json();rows=j.rows.map(r=>Object.fromEntries(j.cols.map((c,i)=>[c,r[i]])))}
+  catch(e){$('#main').innerHTML='<div class="card">불러오기 실패: '+esc(e.message)+'<br><span style="color:var(--sub);font-size:12px">Apps Script를 새 버전으로 다시 배포했는지, 액세스가 "모든 사용자"인지 확인하세요.</span></div>';return}
+  rows.sort((a,b)=>String(b['매물번호']).localeCompare(String(a['매물번호'])));
+  const lab=Object.fromEntries(SCHEMA.filter(f=>!f.sec&&f.k).map(f=>[f.k,f.l]));
+  $('#main').innerHTML=`<div class="card"><div class="grid" style="margin-bottom:10px"><input id="q" placeholder="검색 (주소·제목·번호)"><select id="ft"><option value="">유형 전체</option>${T3.map(t=>`<option>${t}</option>`).join('')}</select></div>
+  <table><thead><tr><th>번호</th><th>유형</th><th>소재지</th><th>금액(만원)</th><th>면적(㎡)</th><th>담당</th><th>상태</th></tr></thead><tbody id="tb"></tbody></table><div id="cnt" style="color:var(--sub);font-size:12px;margin-top:8px"></div></div><dialog id="dv"></dialog>`;
+  const draw=()=>{const q=$('#q').value.trim(),ft=$('#ft').value;
+    const L=rows.filter(r=>(!ft||r['유형']===ft)&&(!q||JSON.stringify(Object.values(r)).includes(q)));
+    $('#tb').innerHTML=L.map(r=>{const m=r.deal==='월세'?`${r.deposit||0}/${r.rent||0}`:`${r.deal||''} ${r.price||''}`;
+      return `<tr class="row" data-i="${rows.indexOf(r)}"><td>${esc(r['매물번호'])}</td><td>${esc(r['유형'])}</td><td>${esc((r.dong||'')+' '+(r.jibun||''))} ${esc(r.bldg||'')}</td><td>${esc(m)}</td><td>${esc(r.excl||r.supply||'')}</td><td>${esc(String(r.manager||'').replace('RB 종로센터 ',''))}</td><td>${esc(r.status||'')}</td></tr>`}).join('');
+    $('#cnt').textContent=`${L.length}건 / 전체 ${rows.length}건`};
+  $('#q').oninput=draw;$('#ft').oninput=draw;draw();
+  $('#tb').onclick=e=>{const tr=e.target.closest('tr');if(!tr)return;const r=rows[+tr.dataset.i];
+    $('#dv').innerHTML=`<h2 style="margin-top:0;font-size:15px">${esc(r['매물번호'])} · ${esc(r.title||'')}</h2><div class="kv">${Object.entries(r).filter(([k,v])=>v!==''&&v!==null).map(([k,v])=>`<b>${esc(lab[k]||k)}</b><span>${esc(v)}</span>`).join('')}</div><div style="text-align:right;margin-top:12px"><button class="btn sm" onclick="this.closest('dialog').close()">닫기</button></div>`;
+    $('#dv').showModal()};
+}
+
 /* ===== 설정 · Apps Script ===== */
-const APPS_SCRIPT=`function doPost(e){
-  var p=JSON.parse(e.postData.contents);
-  var ss=SpreadsheetApp.getActiveSpreadsheet();
-  var sh=ss.getSheetByName('매물DB')||ss.insertSheet('매물DB');
-  if(sh.getLastRow()===0){sh.appendRow(p.cols);sh.setFrozenRows(1);}
-  var ids=sh.getRange(2,1,Math.max(sh.getLastRow()-1,1),1).getValues().flat();
-  var idx=ids.indexOf(p.key);
-  if(idx>=0){sh.getRange(idx+2,1,1,p.row.length).setValues([p.row]);}
-  else{sh.appendRow(p.row);}
-  return ContentService.createTextOutput('ok');
+const APPS_SCRIPT=`function J(o){return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);}
+function sheet_(){var ss=SpreadsheetApp.getActiveSpreadsheet();return ss.getSheetByName('매물DB')||ss.insertSheet('매물DB');}
+function doGet(e){
+  var a=(e.parameter||{}).action, sh=sheet_();
+  if(a==='next'){
+    var mx=0, pre='RB-'+e.parameter.ymd+'-';
+    if(sh.getLastRow()>1){sh.getRange(2,1,sh.getLastRow()-1,1).getValues().flat().forEach(function(v){v=String(v);if(v.indexOf(pre)===0)mx=Math.max(mx,parseInt(v.slice(pre.length),10)||0);});}
+    return J({max:mx});
+  }
+  if(a==='list'){
+    if(sh.getLastRow()<1)return J({cols:[],rows:[]});
+    var v=sh.getDataRange().getDisplayValues();
+    return J({cols:v[0],rows:v.slice(1)});
+  }
+  return J({ok:1});
+}
+function doPost(e){
+  var lock=LockService.getScriptLock();lock.waitLock(20000);
+  try{
+    var p=JSON.parse(e.postData.contents), sh=sheet_();
+    if(sh.getLastRow()===0){sh.appendRow(p.cols);sh.setFrozenRows(1);}
+    var ids=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,1).getValues().flat():[];
+    var idx=ids.indexOf(p.key);
+    if(idx>=0){sh.getRange(idx+2,1,1,p.row.length).setValues([p.row]);}
+    else{sh.appendRow(p.row);}
+    return J({ok:1});
+  }finally{lock.releaseLock();}
 }`;
 $('#bSet').onclick=()=>{$('#sUrl').value=cfg().url||'';$('#sMgr').value=cfg().mgr||'';$('#sKey').value=cfg().kakao||'';$('#dSet').showModal()};
 $('#bSetOk').onclick=()=>{const had=cfg().kakao;localStorage.setItem('mmj-cfg',JSON.stringify({url:$('#sUrl').value.trim(),mgr:$('#sMgr').value.trim(),kakao:$('#sKey').value.trim()}));$('#dSet').close();if($('#sKey').value.trim()!==had&&$('#map'))location.reload()};
@@ -429,8 +472,10 @@ $('#bRoot').onclick=async()=>{await pickRoot()};
 $('#bScript').onclick=()=>{$('#scriptCode').textContent=APPS_SCRIPT;$('#dScript').showModal()};
 $('#bScriptX').onclick=()=>$('#dScript').close();
 $('#bCopy').onclick=()=>navigator.clipboard.writeText(APPS_SCRIPT);
-$('#nR').onclick=()=>{$('#nR').classList.add('on');$('#nL').classList.remove('on');renderForm()};
-$('#nL').onclick=()=>{$('#nL').classList.add('on');$('#nR').classList.remove('on');renderList()};
+const nav=id=>{['nR','nL','nS'].forEach(x=>$('#'+x).classList.toggle('on',x===id))};
+$('#nR').onclick=()=>{nav('nR');renderForm()};
+$('#nL').onclick=()=>{nav('nL');renderList()};
+$('#nS').onclick=()=>{nav('nS');renderSheetList()};
 
 if(!window.showDirectoryPicker){document.body.innerHTML='<div style="padding:40px;text-align:center">이 앱은 Chrome 또는 Edge 브라우저에서 열어 주세요.</div>'}
 else{renderForm();ensureRoot(false)}
