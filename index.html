@@ -25,8 +25,8 @@
 :root{--bg:#f6f4f0;--card:#fdfcfa;--ink:#3d4048;--sub:#80838c;--line:#e6e1d9;--pt:#e8603c;--pt2:#fbebe5;--ok:#059669;--warn:#c08a4a}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Malgun Gothic","Apple SD Gothic Neo",sans-serif}
-header{display:flex;align-items:center;gap:14px;padding:10px 20px;background:#fff;border-bottom:3px solid var(--pt);position:sticky;top:0;z-index:5}
-header h1{font-size:16px;margin:0;font-weight:700;line-height:1.25;color:#2a2d33}header h1 small{display:block;font-size:10px;letter-spacing:.14em;color:var(--pt);font-weight:700}header h1 em{font-style:normal;font-weight:500;color:var(--sub);margin-left:6px;font-size:14px}
+header{display:flex;align-items:center;gap:18px;padding:12px 22px;background:#fff;border-bottom:3px solid var(--pt);position:sticky;top:0;z-index:5}
+header h1{font-size:22px;margin:0;font-weight:800;line-height:1.2;color:#2a2d33;display:flex;align-items:center;gap:14px}header h1 .lg{width:48px;height:48px;border-radius:11px;background:var(--pt);color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;flex:none}header h1 small{display:block;font-size:13px;letter-spacing:.2em;color:var(--pt);font-weight:800}header h1 em{font-style:normal;font-weight:500;color:var(--sub);margin-left:8px;font-size:17px}
 header .sp{flex:1}
 nav button,.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 14px;border-radius:8px;cursor:pointer;font:inherit}
 nav button.on,.btn.pt{background:var(--pt);border-color:var(--pt);color:#fff}
@@ -65,7 +65,7 @@ pre{background:#fff;border:1px solid var(--line);padding:10px;border-radius:8px;
 </head>
 <body>
 <header>
-  <h1><small>REBOUND</small>(주)리바운드부동산중개 종로센터<em>매물장</em></h1>
+  <h1><span class="lg">R</span><span><small>REBOUND</small>(주)리바운드부동산중개 종로센터<em>매물장</em></span></h1>
   <nav><button id="nR" class="on">매물등록</button> <button id="nL">내 폴더 목록</button> <button id="nS">공유DB</button></nav>
   <span class="sp"></span>
   <span id="rootName" style="color:var(--sub);font-size:12px"></span>
@@ -114,6 +114,7 @@ S('위치'),
 {k:'lng',l:'경도',t:'ro'},
 {k:'srcLink',l:'외부 링크',w:2},
 {k:'bldg',l:'건물명'},
+{k:'room',l:'호실 (예: 201호)'},
 {k:'roompub',l:'호실공개',t:'sel',o:['공개','비공개'],def:'비공개'},
 S('금액'),
 {k:'deal',l:'거래형태',t:'sel',o:['월세','매매','전세'],def:'월세'},
@@ -155,7 +156,7 @@ S('기본 정보'),
 {k:'mainUse',l:'주용도'},
 {k:'useDate',l:'사용승인일',t:'date'},
 {k:'seized',l:'압류여부',t:'sel',o:['없음','압류','가압류'],def:'없음'},
-S('고객 정보 (연락처는 폴더 JSON에만 저장, 시트 제외)'),
+S('고객 정보'),
 {k:'c1role',l:'고객1 구분',t:'sel',o:['',...CUS]},{k:'c1name',l:'고객1 이름'},{k:'c1phone',l:'고객1 연락처',priv:1},{k:'c1state',l:'고객1 상태',t:'sel',o:['','진행','계약','보류','종료']},
 {k:'c2role',l:'고객2 구분',t:'sel',o:['',...CUS]},{k:'c2name',l:'고객2 이름'},{k:'c2phone',l:'고객2 연락처',priv:1},{k:'c2state',l:'고객2 상태',t:'sel',o:['','진행','계약','보류','종료']},
 S('추가 정보'),
@@ -166,10 +167,10 @@ S('상세 정보 · 사진'),
 {k:'title',l:'제목',w:'all'},
 {k:'mgmtNo',l:'자체관리번호'},
 {k:'desc',l:'상세정보',t:'area2',w:'all'},
-{k:'secret',l:'비밀메모 (시트 제외)',t:'area2',w:'all',priv:1},
+{k:'secret',l:'비밀메모',t:'area2',w:'all',priv:1},
 ];
 const TYPE_DEFAULT_SUBTYPE={상가점포:'상가·사무실',주거:'원투룸·오피스텔',사무실:'상가·사무실'};
-const SHEET_EXCLUDE=['c1phone','c2phone','secret'];
+const SHEET_EXCLUDE=['c1role','c1name','c1phone','c1state','c2role','c2name','c2phone','c2state','secret'];
 
 /* ===== 상태 ===== */
 let root=null, curType='상가점포', photos=[], files=[];
@@ -217,13 +218,12 @@ function renderForm(){
   let open=false;
   for(const f of SCHEMA){
     if(f.sec){ if(open) out+='</div></div>'; out+=`<div class="card"><h2>${esc(f.sec)}</h2><div class="grid">`; open=true; continue }
-    if(f.special==='addr'){ out+=`<div class="f wall"><div><button class="btn pt" id="bAddr">📍 주소 검색</button> <span style="color:var(--sub);font-size:12px">도로명·지번·건물명으로 검색하면 아래 항목과 지도가 채워집니다</span></div><div id="map"></div><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="bFoot">📊 유동인구 조회</button><button class="btn sm" id="bFmap">🔵 지도에 유동인구 표시</button><select id="fmR" style="width:auto;padding:4px 8px"><option value="500">반경 500m</option><option value="1000" selected>반경 1km</option><option value="2000">반경 2km</option></select><button class="btn sm" id="bGol">🗺 도로별 유동인구 지도 (상권분석 사이트)</button></div><div id="foot"></div></div>`; continue }
+    if(f.special==='addr'){ out+=`<div class="f wall"><div><button class="btn pt" id="bAddr">📍 주소 검색</button> <span style="color:var(--sub);font-size:12px">도로명·지번·건물명으로 검색하면 아래 항목과 지도가 채워집니다</span></div><div id="map"></div><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="bFoot">📊 유동인구 조회</button><button class="btn sm" id="bFmap">🔵 지도에 유동인구 표시</button><select id="fmR" style="width:auto;padding:4px 8px"><option value="500">반경 500m</option><option value="1000" selected>반경 1km</option><option value="2000">반경 2km</option></select><button class="btn sm" id="bGol">🗺 도로별 유동인구 지도 (상권분석 사이트)</button></div><div id="dup"></div><div id="foot"></div></div>`; continue }
     out+=fieldHTML(f);
   }
   if(open) out+='</div></div>';
   out+=`<div class="card"><h2>사진 · 첨부</h2><div class="f"><label>사진 (여러 장)</label><input type="file" id="ph" accept="image/*" multiple></div><div class="thumbs" id="thumbs"></div>
-  <div class="f" style="margin-top:10px"><label>도면·서류 첨부 (여러 개)</label><input type="file" id="fl" multiple></div>
-  <div class="f" style="margin-top:10px"><label>부기사 원본 (캡처·내보내기 파일, 선택)</label><input type="file" id="og" multiple></div></div>
+  <div class="f" style="margin-top:10px"><label>도면·서류 첨부 (여러 개)</label><input type="file" id="fl" multiple></div></div>
   <div class="bar"><span class="msg" id="msg"></span><button class="btn" id="bReset">초기화</button><button class="btn pt" id="bSave">저장</button></div>`;
   $('#main').innerHTML=out;
   applyVisibility(); bind();
@@ -262,6 +262,7 @@ function bind(){
   $('#bReset').onclick=()=>{photos=[];files=[];renderForm()};
   $('#bSave').onclick=save;
   $('#bAddr').onclick=openAddr;
+  ['floor','room','jibun','dong'].forEach(k=>{const e=$('#f_'+k);if(e)e.addEventListener('change',checkDup)});
   $('#bFoot').onclick=footTraffic;$('#bFmap').onclick=footMap;$('#fmR').onchange=()=>{if(fmLayer.length)footMap()};
   $('#bGol').onclick=()=>{const q=$('#f_road').value||`${$('#f_dong').value} ${$('#f_jibun').value}`.trim();try{navigator.clipboard.writeText(q)}catch(e){}
     $('#foot').innerHTML=`<div class="fp"><small>주소 「${esc(q)}」를 복사했습니다. 새 창에서 상권분석 사이트의 <b>유동인구(도로별)</b> 메뉴를 선택하고 주소를 붙여넣어 검색하세요.</small></div>`;
@@ -289,6 +290,7 @@ function onAddr(a){
   $('#dAddr').close();
   applyVisibility();
   geocode((a.roadAddress||a.autoRoadAddress)||ji);
+  checkDup();
 }
 $('#bAddrX').onclick=()=>$('#dAddr').close();
 $('#bLink').onclick=()=>$('#lk').classList.toggle('on');
@@ -379,6 +381,14 @@ async function save(){
   const msg=$('#msg'); const d=getD(); d.type=curType;
   if(!d.dong&&!d.jibun){msg.textContent='소재지(동 또는 상세주소)를 입력해 주세요.';return}
   try{
+    msg.textContent='중복 확인 중...';
+    const dp=await findDup(d);
+    if(dp.hit&&dp.hit.length){
+      const open=dp.hit.filter(r=>!/계약완료|종료/.test(r.status||''));
+      if(open.length){msg.innerHTML='⚠ 이미 등록된 매물이라 저장할 수 없습니다: '+dupMsg(dp.hit);checkDup();return}
+      if(!confirm('같은 주소·층·호실의 매물이 있으나 모두 계약완료/종료 상태입니다.\n재등록하시겠습니까?')){msg.textContent='저장을 취소했습니다.';return}
+    }
+    if(dp.fail) msg.textContent='중복 확인 실패(공유 DB 연결 확인) — 그대로 저장합니다...';
     if(!(await ensureRoot(true))){msg.textContent='저장 위치가 필요합니다.';return}
     msg.textContent='저장 중...';
     const t=today(), no=await nextNo(t.ymd);
@@ -386,16 +396,17 @@ async function save(){
     const folder=`${no}_${addr}_${curType}${d.floor?'_'+d.floor+'층':''}`;
     const statusDir=STATUS_DIR[d.status]||'01_진행중';
     const item=await sub(root,['매물장',statusDir,curType,folder]);
-    const phDir=await sub(item,['사진']),docDir=await sub(item,['도면·서류']),ogDir=await sub(item,['원본']);
+    const phDir=await sub(item,['사진']),docDir=await sub(item,['도면·서류']);
     let i=1; for(const f of photos){await writeFile(phDir,`${String(i++).padStart(2,'0')}_${clean(f.name)}`,f)}
     for(const f of files) await writeFile(docDir,clean(f.name),f);
-    for(const f of [...($('#og').files||[])]) await writeFile(ogDir,clean(f.name),f);
     const rec={no,type:curType,created:t.iso,data:d,photoCount:photos.length,path:`매물장/${statusDir}/${curType}/${folder}`};
     await writeFile(item,'매물정보.json',JSON.stringify(rec,null,2));
     await writeFile(item,'매물장.md',md(rec));
     await appendCsv(rec);
     const s=await pushSheet(rec);
-    msg.textContent=`✔ ${no} 저장 완료 (${s})`;
+    const sp=await pushPrivate(rec);
+    const ph=await pushPhotos(rec,photos,t=>msg.textContent=t);
+    msg.textContent=`✔ ${no} 저장 완료 (${[s,sp,ph].filter(Boolean).join(' · ')})`;
     photos=[];files=[];
   }catch(e){msg.textContent='저장 실패: '+e.message}
 }
@@ -425,6 +436,75 @@ async function renderList(){
   };
 }
 const setupHTML=()=>`<div class="card setup"><h2 style="font-size:16px">저장 위치를 선택해 주세요</h2><p style="color:var(--sub)">선택한 폴더 안에 <b>매물장</b> 폴더와 <b>매물DB.csv</b>가 만들어집니다.<br>(Chrome 또는 Edge에서 실행해 주세요)</p><button class="btn pt" id="bPick">폴더 선택</button></div>`;
+
+
+/* ===== 사진(구글 드라이브) · 고객정보(비공개 시트) 전송 ===== */
+async function shrink(f){
+  try{
+    const bm=await createImageBitmap(f),sc=Math.min(1,1600/Math.max(bm.width,bm.height));
+    const c=document.createElement('canvas');c.width=Math.round(bm.width*sc);c.height=Math.round(bm.height*sc);
+    c.getContext('2d').drawImage(bm,0,0,c.width,c.height);
+    return await new Promise(r=>c.toBlob(r,'image/jpeg',.82));
+  }catch(e){return f.size<3e6?f:null}
+}
+const b64=b=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(String(x.result).split(',')[1]);x.readAsDataURL(b)});
+async function postJ(o){await fetch(cfg().url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(o)})}
+async function pushPrivate(rec){
+  const url=cfg().url;if(!url)return '';
+  const F=SCHEMA.filter(f=>f.k&&SHEET_EXCLUDE.includes(f.k));
+  const cols=['매물번호','등록일','유형','소재지',...F.map(f=>f.l)];
+  const d=rec.data,row=[rec.no,rec.created,rec.type,`${d.dong||''} ${d.jibun||''} ${d.bldg||''} ${d.room||''}`.trim(),...F.map(f=>d[f.k]??'')];
+  if(F.every(f=>!d[f.k]))return '';
+  try{await postJ({action:'private',cols,row,key:rec.no});return '고객정보 비공개 시트 전송'}catch(e){return '고객정보 전송 실패'}
+}
+async function pushPhotos(rec,list,say){
+  const url=cfg().url;if(!url||!list.length)return '';
+  let ok=0,i=0;
+  for(const f of list){
+    i++;say(`사진 업로드 중 ${i}/${list.length} ...`);
+    const b=await shrink(f);if(!b)continue;
+    try{await postJ({action:'photo',no:rec.no,name:`${String(i).padStart(2,'0')}_${clean(f.name).replace(/\.[^.]+$/,'')}.${b.type==='image/jpeg'?'jpg':(f.name.split('.').pop()||'img')}`,mime:b.type||'image/jpeg',b64:await b64(b)});ok++}catch(e){}
+  }
+  return `사진 ${ok}/${list.length}장 드라이브 전송`;
+}
+async function showPhotos(no,box){
+  const url=cfg().url;box.textContent='사진 불러오는 중...';
+  try{
+    const j=await (await fetch(`${url}?action=photos&no=${encodeURIComponent(no)}`)).json();
+    if(!j.list.length){box.textContent='등록된 사진 없음';return}
+    box.textContent='';
+    for(const p of j.list.slice(0,12)){
+      const im=new Image();im.style.cssText='height:90px;margin:3px;border-radius:6px;cursor:pointer';box.append(im);
+      fetch(`${url}?action=photo&thumb=1&id=${p.id}`).then(r=>r.json()).then(x=>{if(x.b64){im.src=`data:${x.mime};base64,${x.b64}`;im.onclick=()=>{fetch(`${url}?action=photo&id=${p.id}`).then(r=>r.json()).then(y=>{const w=window.open();w.document.write(`<img src="data:${y.mime};base64,${y.b64}" style="max-width:100%">`)})}}})
+    }
+  }catch(e){box.textContent='사진 불러오기 실패'}
+}
+
+/* ===== 중복 매물 확인 (공유 DB 기준: 동+지번+층+호실) ===== */
+let dupCache={t:0,rows:null};
+const nz=s=>String(s??'').replace(/\s/g,'').replace(/호$/,'');
+const dupKey=d=>[nz(d.sido),nz(d.gu),nz(d.dong),nz(d.jibun),nz(d.floorKind),nz(d.floor),nz(d.room)].join('|');
+async function sheetRows(){
+  const url=cfg().url; if(!url) return null;
+  if(dupCache.rows&&Date.now()-dupCache.t<30000) return dupCache.rows;
+  const j=await (await fetch(url+'?action=list')).json();
+  dupCache={t:Date.now(),rows:j.rows.map(r=>Object.fromEntries(j.cols.map((c,i)=>[c,r[i]])))};
+  return dupCache.rows;
+}
+async function findDup(d){
+  if(!d.dong&&!d.jibun) return {skip:1};
+  let rows; try{rows=await sheetRows()}catch(e){return {fail:e.message}}
+  if(!rows) return {nourl:1};
+  const k=dupKey(d); return {hit:rows.filter(r=>dupKey(r)===k)};
+}
+function dupMsg(h){return h.map(r=>`<b>${esc(r['매물번호'])}</b> · ${esc(r.status||'')} · 담당 ${esc(String(r.manager||'').replace('RB 종로센터 ',''))}`).join('<br>')}
+async function checkDup(){
+  const box=$('#dup'); if(!box) return;
+  const r=await findDup(getD());
+  if(r.hit&&r.hit.length) box.innerHTML=`<div class="fp" style="border-color:var(--pt);background:var(--pt2)">⚠ 이미 등록된 매물입니다 (같은 주소·층·호실)<br>${dupMsg(r.hit)}<br><small>이 상태로는 저장되지 않습니다. 호실·층이 다르면 해당 칸을 수정하세요.</small></div>`;
+  else if(r.hit) box.innerHTML='<div class="fp" style="border-color:var(--ok)">✔ 공유 DB에 같은 매물이 없습니다.</div>';
+  else box.innerHTML='';
+}
 
 /* ===== 유동인구 (서울시 상권분석서비스 · 길단위인구-상권) ===== */
 const nf=n=>Math.round(+n||0).toLocaleString();
@@ -508,7 +588,7 @@ async function renderSheetList(){
   $('#q').oninput=draw;$('#ft').oninput=draw;draw();
   $('#tb').onclick=e=>{const tr=e.target.closest('tr');if(!tr)return;const r=rows[+tr.dataset.i];
     $('#dv').innerHTML=`<h2 style="margin-top:0;font-size:15px">${esc(r['매물번호'])} · ${esc(r.title||'')}</h2><div class="kv">${Object.entries(r).filter(([k,v])=>v!==''&&v!==null).map(([k,v])=>`<b>${esc(lab[k]||k)}</b><span>${esc(v)}</span>`).join('')}</div><div style="text-align:right;margin-top:12px"><button class="btn sm" onclick="this.closest('dialog').close()">닫기</button></div>`;
-    $('#dv').showModal()};
+    $('#dv').showModal();const pb=document.createElement('div');pb.id='sp';pb.style.marginTop='10px';$('#dv').querySelector('.kv').after(pb);showPhotos(r['매물번호'],pb)};
 }
 
 /* ===== 설정 · Apps Script ===== */
@@ -594,8 +674,56 @@ function footmap_(lat,lng,radius){
   });
   return {quarter:fp.quarter,nearest:best,list:list};
 }
+function props_(){return PropertiesService.getScriptProperties();}
+function sub_(parent,name){var it=parent.getFoldersByName(name);return it.hasNext()?it.next():parent.createFolder(name);}
+function photoRoot_(){
+  var id=props_().getProperty('PHOTO_ROOT'), f=null;
+  if(id){try{f=DriveApp.getFolderById(id);}catch(e){}}
+  if(!f){f=DriveApp.createFolder('매물장_사진');props_().setProperty('PHOTO_ROOT',f.getId());}
+  return f;
+}
+function priv_(){
+  var id=props_().getProperty('PRIV_ID'), ss=null;
+  if(id){try{ss=SpreadsheetApp.openById(id);}catch(e){}}
+  if(!ss){ss=SpreadsheetApp.create('매물장_고객DB(비공개)');props_().setProperty('PRIV_ID',ss.getId());}
+  return ss;
+}
+function upsert_(sh,cols,row,key){
+  if(sh.getLastRow()===0){sh.appendRow(cols);sh.setFrozenRows(1);}
+  var head=sh.getRange(1,1,1,Math.max(sh.getLastColumn(),1)).getValues()[0].map(String);
+  var add=cols.filter(function(c){return head.indexOf(c)<0;});
+  if(add.length){sh.getRange(1,head.length+1,1,add.length).setValues([add]);head=head.concat(add);}
+  var out=head.map(function(h){var i=cols.indexOf(h);return i<0?'':row[i];});
+  var ids=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,1).getValues().flat():[];
+  var idx=ids.indexOf(key);
+  if(idx>=0){sh.getRange(idx+2,1,1,out.length).setValues([out]);}else{sh.appendRow(out);}
+}
+function savePrivate_(p){var ss=priv_();upsert_(ss.getSheetByName('고객·비밀메모')||ss.insertSheet('고객·비밀메모'),p.cols,p.row,p.key);}
+function savePhoto_(p){
+  var f=sub_(photoRoot_(),p.no);
+  f.createFile(Utilities.newBlob(Utilities.base64Decode(p.b64),p.mime||'image/jpeg',p.name));
+}
+function photos_(no){
+  var it=photoRoot_().getFoldersByName(no); if(!it.hasNext())return {list:[]};
+  var fs=it.next().getFiles(), l=[];
+  while(fs.hasNext()){var x=fs.next();l.push({id:x.getId(),name:x.getName()});}
+  l.sort(function(a,b){return a.name<b.name?-1:1;});
+  return {list:l};
+}
+function photo_(id,thumb){
+  var f=DriveApp.getFileById(id), pr=f.getParents();
+  if(!pr.hasNext())return {error:'x'};
+  var gp=pr.next().getParents();
+  if(!gp.hasNext()||gp.next().getId()!==photoRoot_().getId())return {error:'권한 없음'};
+  var b=null; if(thumb){try{b=f.getThumbnail();}catch(e){}}
+  if(!b)b=f.getBlob();
+  return {mime:b.getContentType(),b64:Utilities.base64Encode(b.getBytes())};
+}
+function 권한승인(){DriveApp.getRootFolder();SpreadsheetApp.create('권한확인_삭제해도됨').getId();photoRoot_();priv_();Logger.log('권한 승인 완료');}
 function doGet(e){
   var a=(e.parameter||{}).action, sh=sheet_();
+  if(a==='photos')return J(photos_(e.parameter.no));
+  if(a==='photo')return J(photo_(e.parameter.id,e.parameter.thumb));
   if(a==='footmap')return J(footmap_(e.parameter.lat,e.parameter.lng,e.parameter.radius));
   if(a==='foot')return J(foot_(e.parameter.lat,e.parameter.lng));
   if(a==='next'){
@@ -611,17 +739,16 @@ function doGet(e){
   return J({ok:1});
 }
 function doPost(e){
+  var p=JSON.parse(e.postData.contents);
+  if(p.action==='photo'){savePhoto_(p);return J({ok:1});}
   var lock=LockService.getScriptLock();lock.waitLock(20000);
   try{
-    var p=JSON.parse(e.postData.contents), sh=sheet_();
-    if(sh.getLastRow()===0){sh.appendRow(p.cols);sh.setFrozenRows(1);}
-    var ids=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,1).getValues().flat():[];
-    var idx=ids.indexOf(p.key);
-    if(idx>=0){sh.getRange(idx+2,1,1,p.row.length).setValues([p.row]);}
-    else{sh.appendRow(p.row);}
+    if(p.action==='private'){savePrivate_(p);return J({ok:1});}
+    upsert_(sheet_(),p.cols,p.row,p.key);
     return J({ok:1});
   }finally{lock.releaseLock();}
-}`;
+}
+`;
 $('#bSet').onclick=()=>{$('#sUrl').value=cfg().url||'';$('#sMgr').value=cfg().mgr||'';$('#sKey').value=cfg().kakao||'';$('#dSet').showModal()};
 $('#bSetOk').onclick=()=>{const had=cfg().kakao;localStorage.setItem('mmj-cfg',JSON.stringify({url:$('#sUrl').value.trim(),mgr:$('#sMgr').value.trim(),kakao:$('#sKey').value.trim()}));$('#dSet').close();if($('#sKey').value.trim()!==had&&$('#map'))location.reload()};
 $('#bRoot').onclick=async()=>{await pickRoot()};
