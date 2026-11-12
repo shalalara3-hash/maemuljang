@@ -450,7 +450,7 @@ async function footTraffic(){
 
 /* ===== 지도 유동인구 원 표시 ===== */
 let fmLayer=[],fmBall=null;
-const FM_RAMP=['#dbe6ee','#b3cbdc','#86a9c2','#5f7d95','#3b566b'];
+const FM_RAMP=['#fbe3d9','#f6c3ae','#f09a78','#e8603c','#b8401f'];
 function fmClear(){fmLayer.forEach(o=>o.setMap(null));fmLayer=[];if(fmBall){fmBall.setMap(null);fmBall=null}const l=$('#fleg');if(l)l.remove()}
 async function footMap(){
   const box=$('#foot'),url=cfg().url,lat=+$('#f_lat').value,lng=+$('#f_lng').value,R=+$('#fmR').value;
