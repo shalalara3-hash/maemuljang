@@ -170,7 +170,7 @@ S('상세 정보 · 사진'),
 {k:'secret',l:'비밀메모',t:'area2',w:'all',priv:1},
 ];
 const TYPE_DEFAULT_SUBTYPE={상가점포:'상가·사무실',주거:'원투룸·오피스텔',사무실:'상가·사무실'};
-const SHEET_EXCLUDE=['c1role','c1name','c1phone','c1state','c2role','c2name','c2phone','c2state','secret'];
+const SHEET_EXCLUDE=[];
 
 /* ===== 상태 ===== */
 let root=null, curType='상가점포', photos=[], files=[];
@@ -404,7 +404,7 @@ async function save(){
     await writeFile(item,'매물장.md',md(rec));
     await appendCsv(rec);
     const s=await pushSheet(rec);
-    const sp=await pushPrivate(rec);
+    const sp='';
     const ph=await pushPhotos(rec,photos,t=>msg.textContent=t);
     msg.textContent=`✔ ${no} 저장 완료 (${[s,sp,ph].filter(Boolean).join(' · ')})`;
     photos=[];files=[];
@@ -682,12 +682,6 @@ function photoRoot_(){
   if(!f){f=DriveApp.createFolder('매물장_사진');props_().setProperty('PHOTO_ROOT',f.getId());}
   return f;
 }
-function priv_(){
-  var id=props_().getProperty('PRIV_ID'), ss=null;
-  if(id){try{ss=SpreadsheetApp.openById(id);}catch(e){}}
-  if(!ss){ss=SpreadsheetApp.create('매물장_고객DB(비공개)');props_().setProperty('PRIV_ID',ss.getId());}
-  return ss;
-}
 function upsert_(sh,cols,row,key){
   if(sh.getLastRow()===0){sh.appendRow(cols);sh.setFrozenRows(1);}
   var head=sh.getRange(1,1,1,Math.max(sh.getLastColumn(),1)).getValues()[0].map(String);
@@ -698,7 +692,6 @@ function upsert_(sh,cols,row,key){
   var idx=ids.indexOf(key);
   if(idx>=0){sh.getRange(idx+2,1,1,out.length).setValues([out]);}else{sh.appendRow(out);}
 }
-function savePrivate_(p){var ss=priv_();upsert_(ss.getSheetByName('고객·비밀메모')||ss.insertSheet('고객·비밀메모'),p.cols,p.row,p.key);}
 function savePhoto_(p){
   var f=sub_(photoRoot_(),p.no);
   f.createFile(Utilities.newBlob(Utilities.base64Decode(p.b64),p.mime||'image/jpeg',p.name));
@@ -719,7 +712,7 @@ function photo_(id,thumb){
   if(!b)b=f.getBlob();
   return {mime:b.getContentType(),b64:Utilities.base64Encode(b.getBytes())};
 }
-function 권한승인(){DriveApp.getRootFolder();SpreadsheetApp.create('권한확인_삭제해도됨').getId();photoRoot_();priv_();Logger.log('권한 승인 완료');}
+function 권한승인(){DriveApp.getRootFolder();SpreadsheetApp.getActiveSpreadsheet();photoRoot_();Logger.log('권한 승인 완료');}
 function doGet(e){
   var a=(e.parameter||{}).action, sh=sheet_();
   if(a==='photos')return J(photos_(e.parameter.no));
@@ -733,8 +726,9 @@ function doGet(e){
   }
   if(a==='list'){
     if(sh.getLastRow()<1)return J({cols:[],rows:[]});
-    var v=sh.getDataRange().getDisplayValues();
-    return J({cols:v[0],rows:v.slice(1)});
+    var v=sh.getDataRange().getDisplayValues(), hide=['c1role','c1name','c1phone','c1state','c2role','c2name','c2phone','c2state','secret'];
+    var keep=[];v[0].forEach(function(c,i){if(hide.indexOf(c)<0)keep.push(i);});
+    return J({cols:keep.map(function(i){return v[0][i];}),rows:v.slice(1).map(function(r){return keep.map(function(i){return r[i];});})});
   }
   return J({ok:1});
 }
@@ -743,7 +737,6 @@ function doPost(e){
   if(p.action==='photo'){savePhoto_(p);return J({ok:1});}
   var lock=LockService.getScriptLock();lock.waitLock(20000);
   try{
-    if(p.action==='private'){savePrivate_(p);return J({ok:1});}
     upsert_(sheet_(),p.cols,p.row,p.key);
     return J({ok:1});
   }finally{lock.releaseLock();}
