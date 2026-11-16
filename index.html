@@ -79,6 +79,7 @@ pre{background:#fff;border:1px solid var(--line);padding:10px;border-radius:8px;
   <div class="f"><label>Apps Script 웹앱 URL</label><input id="sUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
   <div class="f" style="margin-top:8px"><label>카카오 지도 JavaScript 키</label><input id="sKey" placeholder="카카오 디벨로퍼스 > 앱 > JavaScript 키"></div>
   <div class="f" style="margin-top:8px"><label>기본 담당자</label><input id="sMgr" placeholder="RB 종로센터 김세리 대표"></div>
+  <label style="display:block;margin-top:10px;font-size:13px"><input type="checkbox" id="sPc"> 이 PC의 폴더에도 저장 (사진·도면은 항상 구글 드라이브에 저장됩니다)</label>
   <div style="margin-top:12px;display:flex;gap:8px;justify-content:space-between">
     <button class="btn sm" id="bRoot">저장 위치 다시 선택</button>
     <span><button class="btn sm" id="bScript">Apps Script 코드 보기</button> <button class="btn pt sm" id="bSetOk">확인</button></span>
@@ -378,9 +379,11 @@ function md(rec){
   return L.join('\n');
 }
 async function save(){
-  const msg=$('#msg'); const d=getD(); d.type=curType;
+  const msg=$('#msg'); const d=getD(); d.type=curType; const pc=!!cfg().pc;
   if(!d.dong&&!d.jibun){msg.textContent='소재지(동 또는 상세주소)를 입력해 주세요.';return}
+  if(!cfg().url&&!pc){msg.textContent='저장할 곳이 없습니다. 설정에서 Apps Script URL을 넣거나 PC 폴더 저장을 켜 주세요.';return}
   try{
+    if(pc&&!(await ensureRoot(true))){msg.textContent='저장 위치가 필요합니다. (설정에서 PC 폴더 저장을 끌 수도 있습니다)';return}
     msg.textContent='중복 확인 중...';
     const dp=await findDup(d);
     if(dp.hit&&dp.hit.length){
@@ -389,24 +392,25 @@ async function save(){
       if(!confirm('같은 주소·층·호실의 매물이 있으나 모두 계약완료/종료 상태입니다.\n재등록하시겠습니까?')){msg.textContent='저장을 취소했습니다.';return}
     }
     if(dp.fail) msg.textContent='중복 확인 실패(공유 DB 연결 확인) — 그대로 저장합니다...';
-    if(!(await ensureRoot(true))){msg.textContent='저장 위치가 필요합니다.';return}
     msg.textContent='저장 중...';
     const t=today(), no=await nextNo(t.ymd);
     const addr=clean(`${d.dong}${d.jibun?' '+d.jibun:''}`).replace(/\s/g,'')||'주소미상';
     const folder=`${no}_${addr}_${curType}${d.floor?'_'+d.floor+'층':''}`;
     const statusDir=STATUS_DIR[d.status]||'01_진행중';
-    const item=await sub(root,['매물장',statusDir,curType,folder]);
-    const phDir=await sub(item,['사진']),docDir=await sub(item,['도면·서류']);
-    let i=1; for(const f of photos){await writeFile(phDir,`${String(i++).padStart(2,'0')}_${clean(f.name)}`,f)}
-    for(const f of files) await writeFile(docDir,clean(f.name),f);
-    const rec={no,type:curType,created:t.iso,data:d,photoCount:photos.length,path:`매물장/${statusDir}/${curType}/${folder}`};
-    await writeFile(item,'매물정보.json',JSON.stringify(rec,null,2));
-    await writeFile(item,'매물장.md',md(rec));
-    await appendCsv(rec);
+    const rec={no,type:curType,created:t.iso,data:d,photoCount:photos.length,path:pc?`매물장/${statusDir}/${curType}/${folder}`:'구글 드라이브'};
+    if(pc){
+      const item=await sub(root,['매물장',statusDir,curType,folder]);
+      const phDir=await sub(item,['사진']),docDir=await sub(item,['도면·서류']);
+      let i=1; for(const f of photos){await writeFile(phDir,`${String(i++).padStart(2,'0')}_${clean(f.name)}`,f)}
+      for(const f of files) await writeFile(docDir,clean(f.name),f);
+      await writeFile(item,'매물정보.json',JSON.stringify(rec,null,2));
+      await writeFile(item,'매물장.md',md(rec));
+      await appendCsv(rec);
+    }
     const s=await pushSheet(rec);
-    const sp='';
     const ph=await pushPhotos(rec,photos,t=>msg.textContent=t);
-    msg.textContent=`✔ ${no} 저장 완료 (${[s,sp,ph].filter(Boolean).join(' · ')})`;
+    const dc=await pushDocs(rec,files,t=>msg.textContent=t);
+    msg.textContent=`✔ ${no} 저장 완료 (${[pc?'PC 폴더 저장':'',s,ph,dc].filter(Boolean).join(' · ')})`;
     photos=[];files=[];
   }catch(e){msg.textContent='저장 실패: '+e.message}
 }
@@ -480,10 +484,34 @@ async function showPhotos(no,box){
   }catch(e){box.textContent='사진 불러오기 실패'}
 }
 
+async function pushDocs(rec,list,say){
+  const url=cfg().url;if(!url||!list.length)return '';
+  let ok=0,skip=0,i=0;
+  for(const f of list){
+    i++;if(f.size>15e6){skip++;continue}
+    say(`도면·서류 업로드 중 ${i}/${list.length} ...`);
+    try{await postJ({action:'photo',kind:'doc',no:rec.no,name:clean(f.name),mime:f.type||'application/octet-stream',b64:await b64(f)});ok++}catch(e){}
+  }
+  return `도면·서류 ${ok}/${list.length}개 드라이브 전송`+(skip?` (15MB 초과 ${skip}개 제외)`:'');
+}
+async function showDocs(no,box){
+  const url=cfg().url;
+  try{
+    const j=await (await fetch(`${url}?action=docs&no=${encodeURIComponent(no)}`)).json();
+    if(!j.list.length)return;
+    box.innerHTML='<b style="font-size:12px">도면·서류</b><br>';
+    j.list.forEach(p=>{const a=document.createElement('a');a.href='#';a.textContent=p.name;a.style.cssText='display:block;font-size:13px;color:var(--pt)';
+      a.onclick=async e=>{e.preventDefault();a.textContent=p.name+' (불러오는 중...)';const x=await (await fetch(`${url}?action=photo&id=${p.id}`)).json();a.textContent=p.name;
+        if(x.b64){const bin=atob(x.b64),u=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u[k]=bin.charCodeAt(k);const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([u],{type:x.mime}));l.download=p.name;l.click()}};
+      box.append(a)});
+  }catch(e){}
+}
+
 /* ===== 중복 매물 확인 (공유 DB 기준: 동+지번+층+호실) ===== */
 let dupCache={t:0,rows:null};
-const nz=s=>String(s??'').replace(/\s/g,'').replace(/호$/,'');
-const dupKey=d=>[nz(d.sido),nz(d.gu),nz(d.dong),nz(d.jibun),nz(d.floorKind),nz(d.floor),nz(d.room)].join('|');
+const nz=s=>String(s??'').replace(/\s/g,'').replace(/호$/,'').replace(/층$/,'');
+const addrKey=d=>[nz(d.sido),nz(d.gu),nz(d.dong),nz(d.jibun)].join('|');
+const same=(a,b)=>!nz(a)||!nz(b)||nz(a)===nz(b);
 async function sheetRows(){
   const url=cfg().url; if(!url) return null;
   if(dupCache.rows&&Date.now()-dupCache.t<30000) return dupCache.rows;
@@ -492,16 +520,20 @@ async function sheetRows(){
   return dupCache.rows;
 }
 async function findDup(d){
-  if(!d.dong&&!d.jibun) return {skip:1};
+  if(!d.dong||!d.jibun) return {skip:1};
   let rows; try{rows=await sheetRows()}catch(e){return {fail:e.message}}
   if(!rows) return {nourl:1};
-  const k=dupKey(d); return {hit:rows.filter(r=>dupKey(r)===k)};
+  const k=addrKey(d), cand=rows.filter(r=>addrKey(r)===k);
+  const hit=cand.filter(r=>nz(d.floor)&&nz(r.floor)&&nz(d.floor)===nz(r.floor)&&same(d.floorKind,r.floorKind)&&same(d.room,r.room));
+  return {hit,near:cand.filter(r=>!hit.includes(r))};
 }
 function dupMsg(h){return h.map(r=>`<b>${esc(r['매물번호'])}</b> · ${esc(r.status||'')} · 담당 ${esc(String(r.manager||'').replace('RB 종로센터 ',''))}`).join('<br>')}
 async function checkDup(){
   const box=$('#dup'); if(!box) return;
-  const r=await findDup(getD());
+  const dd=getD(),r=await findDup(dd);
+  if(r.hit&&!r.hit.length&&!nz(dd.floor)&&r.near&&r.near.length){box.innerHTML='<div class="fp">같은 주소에 등록된 매물이 있습니다. <b>해당층</b>을 입력하면 같은 매물인지 확인합니다.</div>';return}
   if(r.hit&&r.hit.length) box.innerHTML=`<div class="fp" style="border-color:var(--pt);background:var(--pt2)">⚠ 이미 등록된 매물입니다 (같은 주소·층·호실)<br>${dupMsg(r.hit)}<br><small>이 상태로는 저장되지 않습니다. 호실·층이 다르면 해당 칸을 수정하세요.</small></div>`;
+  else if(r.hit&&r.near&&r.near.length) box.innerHTML=`<div class="fp">같은 주소에 다른 층·호실 매물 ${r.near.length}건이 있습니다 (저장은 가능). 층·호실이 같은 매물은 없습니다.<br><small>${r.near.slice(0,5).map(x=>esc(x['매물번호'])+' '+esc(x.floor||'')+'층 '+esc(x.room||'')).join(' / ')}</small></div>`;
   else if(r.hit) box.innerHTML='<div class="fp" style="border-color:var(--ok)">✔ 공유 DB에 같은 매물이 없습니다.</div>';
   else box.innerHTML='';
 }
@@ -588,7 +620,7 @@ async function renderSheetList(){
   $('#q').oninput=draw;$('#ft').oninput=draw;draw();
   $('#tb').onclick=e=>{const tr=e.target.closest('tr');if(!tr)return;const r=rows[+tr.dataset.i];
     $('#dv').innerHTML=`<h2 style="margin-top:0;font-size:15px">${esc(r['매물번호'])} · ${esc(r.title||'')}</h2><div class="kv">${Object.entries(r).filter(([k,v])=>v!==''&&v!==null).map(([k,v])=>`<b>${esc(lab[k]||k)}</b><span>${esc(v)}</span>`).join('')}</div><div style="text-align:right;margin-top:12px"><button class="btn sm" onclick="this.closest('dialog').close()">닫기</button></div>`;
-    $('#dv').showModal();const pb=document.createElement('div');pb.id='sp';pb.style.marginTop='10px';$('#dv').querySelector('.kv').after(pb);showPhotos(r['매물번호'],pb)};
+    $('#dv').showModal();const pb=document.createElement('div');pb.id='sp';pb.style.marginTop='10px';$('#dv').querySelector('.kv').after(pb);showPhotos(r['매물번호'],pb);const db=document.createElement('div');db.style.marginTop='10px';pb.after(db);showDocs(r['매물번호'],db)};
 }
 
 /* ===== 설정 · Apps Script ===== */
@@ -693,8 +725,8 @@ function upsert_(sh,cols,row,key){
   if(idx>=0){sh.getRange(idx+2,1,1,out.length).setValues([out]);}else{sh.appendRow(out);}
 }
 function savePhoto_(p){
-  var f=sub_(photoRoot_(),p.no);
-  f.createFile(Utilities.newBlob(Utilities.base64Decode(p.b64),p.mime||'image/jpeg',p.name));
+  var f=sub_(photoRoot_(),p.no); if(p.kind==='doc')f=sub_(f,'도면·서류');
+  f.createFile(Utilities.newBlob(Utilities.base64Decode(p.b64),p.mime||'application/octet-stream',p.name));
 }
 function photos_(no){
   var it=photoRoot_().getFoldersByName(no); if(!it.hasNext())return {list:[]};
@@ -703,18 +735,26 @@ function photos_(no){
   l.sort(function(a,b){return a.name<b.name?-1:1;});
   return {list:l};
 }
+function docs_(no){
+  var it=photoRoot_().getFoldersByName(no); if(!it.hasNext())return {list:[]};
+  var d=it.next().getFoldersByName('도면·서류'); if(!d.hasNext())return {list:[]};
+  var fs=d.next().getFiles(), l=[];
+  while(fs.hasNext()){var x=fs.next();l.push({id:x.getId(),name:x.getName()});}
+  l.sort(function(a,b){return a.name<b.name?-1:1;});
+  return {list:l};
+}
 function photo_(id,thumb){
-  var f=DriveApp.getFileById(id), pr=f.getParents();
-  if(!pr.hasNext())return {error:'x'};
-  var gp=pr.next().getParents();
-  if(!gp.hasNext()||gp.next().getId()!==photoRoot_().getId())return {error:'권한 없음'};
+  var f=DriveApp.getFileById(id), cur=f, ok=false, root=photoRoot_().getId();
+  for(var i=0;i<3&&!ok;i++){var pr=cur.getParents();if(!pr.hasNext())break;cur=pr.next();if(cur.getId()===root)ok=true;}
+  if(!ok)return {error:'권한 없음'};
   var b=null; if(thumb){try{b=f.getThumbnail();}catch(e){}}
   if(!b)b=f.getBlob();
-  return {mime:b.getContentType(),b64:Utilities.base64Encode(b.getBytes())};
+  return {mime:b.getContentType(),name:f.getName(),b64:Utilities.base64Encode(b.getBytes())};
 }
 function 권한승인(){DriveApp.getRootFolder();SpreadsheetApp.getActiveSpreadsheet();photoRoot_();Logger.log('권한 승인 완료');}
 function doGet(e){
   var a=(e.parameter||{}).action, sh=sheet_();
+  if(a==='docs')return J(docs_(e.parameter.no));
   if(a==='photos')return J(photos_(e.parameter.no));
   if(a==='photo')return J(photo_(e.parameter.id,e.parameter.thumb));
   if(a==='footmap')return J(footmap_(e.parameter.lat,e.parameter.lng,e.parameter.radius));
@@ -742,8 +782,8 @@ function doPost(e){
   }finally{lock.releaseLock();}
 }
 `;
-$('#bSet').onclick=()=>{$('#sUrl').value=cfg().url||'';$('#sMgr').value=cfg().mgr||'';$('#sKey').value=cfg().kakao||'';$('#dSet').showModal()};
-$('#bSetOk').onclick=()=>{const had=cfg().kakao;localStorage.setItem('mmj-cfg',JSON.stringify({url:$('#sUrl').value.trim(),mgr:$('#sMgr').value.trim(),kakao:$('#sKey').value.trim()}));$('#dSet').close();if($('#sKey').value.trim()!==had&&$('#map'))location.reload()};
+$('#bSet').onclick=()=>{$('#sPc').checked=!!cfg().pc;$('#sUrl').value=cfg().url||'';$('#sMgr').value=cfg().mgr||'';$('#sKey').value=cfg().kakao||'';$('#dSet').showModal()};
+$('#bSetOk').onclick=()=>{const had=cfg().kakao;localStorage.setItem('mmj-cfg',JSON.stringify({url:$('#sUrl').value.trim(),mgr:$('#sMgr').value.trim(),kakao:$('#sKey').value.trim(),pc:$('#sPc').checked}));$('#dSet').close();if($('#sKey').value.trim()!==had&&$('#map'))location.reload()};
 $('#bRoot').onclick=async()=>{await pickRoot()};
 $('#bScript').onclick=()=>{$('#scriptCode').textContent=APPS_SCRIPT;$('#dScript').showModal()};
 $('#bScriptX').onclick=()=>$('#dScript').close();
